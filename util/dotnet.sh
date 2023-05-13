@@ -10,7 +10,7 @@ create_nuget_registry() {
       ;;
       h) 
         echo "Usage"
-        echo "  create-nuget-registry.sh [-d <registry-directory>] [-n <registry-name>] [-h]"
+        echo "  create_nuget_registry [-d <registry-directory>] [-n <registry-name>] [-h]"
         echo "  -d: Path to the nuget registry, defaults to $HOME/.nuget-registry"
         echo "  -n: Name of the nuget registry, defaults to suhdev"
         exit 0
@@ -134,6 +134,7 @@ dotnet_pack() {
   local project_path=$1
   local version="1.0.0"
   local configuration="Release"
+  local outputdir="$(dirname $project_path)/bin/Release"
 
   while getopts ":v:c:t:h" opt; do
     case $opt in
@@ -165,7 +166,7 @@ dotnet_pack() {
 
   if [ $? -eq 1 ]; then
     dotnet restore $project_path
-    dotnet pack "$project_path" -c "$configuration" -p:PackageVersion=$version
+    dotnet pack "$project_path" -c "$configuration" -p:PackageVersion=$version -o $outputdir
   fi
 }
 
@@ -195,14 +196,22 @@ build_dotnet_release_docker_image() {
   local csproj_path_no_extension="${csproj_path%.*}"
   local dll_name="$(basename $csproj_path_no_extension).dll"
   local image_name=$(basename $csproj_path_no_extension | tr '[:upper:]' '[:lower:]')
+  local registry_name="local-registry"
+  local should_push=false
 
-  while getopts ":v:i:h" opt; do
+  while getopts ":v:i:rp:h" opt; do
     case $opt in
       v) 
         version="$OPTARG"
         ;;
       i)
         image_name="$OPTARG"
+        ;;
+      r)
+        registry_name="$OPTARG"
+        ;;
+      p)
+        should_push=true
         ;;
       h)
         echo "Usage"
@@ -227,4 +236,12 @@ build_dotnet_release_docker_image() {
   DOCKER_BUILDKIT=0 docker build -t $image_tag -f "$(dirname $0)/Dockerfile" \
     --build-arg DLL_NAME=$dll_name \
     $outputdir
+  
+  if [ $should_push = true ]; then
+    # check if registry isn't local registry 
+    if [ "$registry_name" != "local-registry" ]; then
+      docker tag $image_tag $registry_name/$image_tag
+      docker push $registry_name/$image_tag
+    fi
+  fi
 }
