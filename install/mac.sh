@@ -4,3 +4,4 @@
 
 # tools
 brew install --cask raycast
+brew install xmlstarlet
