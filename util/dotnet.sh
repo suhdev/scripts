@@ -23,11 +23,16 @@ create_nuget_registry() {
   # Check if the folder already exists
   if [ -d "$registry_directory" ]; then
       echo "Folder '$registry_directory' already exists."
+      check_exists=$(dotnet nuget list source | grep "$registry_name [Enabled]")
+      if [ ! -n "$check_exists" ]; then
+        dotnet nuget add source $registry_directory --name $registry_name
+      fi
   else
       # Create the folder
       mkdir "$registry_directory"
       echo "Folder '$registry_directory' created."
-      if grep -q "$2" "$(dotnet nuget list source)"; then
+      check_exists=$(dotnet nuget list source | grep "$registry_name [Enabled]")
+      if [ ! -n "$check_exists" ]; then
         dotnet nuget add source $registry_directory --name $registry_name
       fi
   fi
@@ -133,17 +138,32 @@ dotnet_build_service() {
 
 dotnet_pack() {
   local project_path=$1
+
+  # check if project_path is a file
+  if [ ! -f "$project_path" ]; then
+    project_path=$(find_first_file_in_parent_directories_that_match_extension csproj)
+    
+  fi
+
   local version="1.0.0"
   local configuration="Release"
+  local registry_name="suhdev"
   local outputdir="$(dirname $project_path)/bin/Release"
+  local push=false
 
-  while getopts ":v:c:t:h" opt; do
+  while getopts ":v:c:t:ir:h" opt; do
     case $opt in
       v) 
         version="$OPTARG"
       ;;
       c) 
         configuration="$OPTARG"
+      ;;
+      i)
+        push=true
+      ;;
+      r)
+        registry_name="$OPTARG"
       ;;
       h)
         echo "Usage"
@@ -168,6 +188,7 @@ dotnet_pack() {
   if [ $? -eq 1 ]; then
     dotnet restore $project_path
     dotnet pack "$project_path" -c "$configuration" -p:PackageVersion=$version -o $outputdir
+    dotnet nuget push "$outputdir/*.nupkg" --source $registry_name
   fi
 }
 
@@ -375,7 +396,7 @@ add_dependency_to_project() {
 
   install_software xmlstarlet &> /dev/null
 
-  local exist_version=$(xmlstarlet sel -t -v "/Project/PropertyGroup/$variable_name" $directory_build_props_path)
+  local exist_version=$(xmlstarlet sel -N x="http://schemas.microsoft.com/developer/msbuild/2003" -t -v "/x:Project/x:PropertyGroup/x:$variable_name" $directory_build_props_path)
 
   exist_version=${exist_version//[[:space:]]/}
   if [ -n "$exist_version" ]; then
@@ -388,6 +409,7 @@ add_dependency_to_project() {
   
   if [ -z "$exist_dependency" ]; then
     # add PackageReference to csproj
+    add_element_with_value_if_not_exist "ItemGroup" "" "/Project" $csproj_path
     xmlstarlet ed -L -s "/Project/ItemGroup[last()]" -t elem -n "PackageReference" -v "" $csproj_path
     xmlstarlet ed -L -s "/Project/ItemGroup[last()]/PackageReference[last()]" -t attr -n "Include" -v $dependency_name $csproj_path
     xmlstarlet ed -L -s "/Project/ItemGroup[last()]/PackageReference[last()]" -t attr -n "Version" -v "\$($variable_name)" $csproj_path
