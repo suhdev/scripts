@@ -1,4 +1,4 @@
-create-nuget-registry() {
+create_nuget_registry() {
   local registry_directory="$(realpath $HOME/.nuget-registry)"
   local registry_name="suhdev"
 
@@ -33,11 +33,11 @@ create-nuget-registry() {
   fi
 }
 
-clear-dotnet-local-cache() {
+clear_dotnet_local_cache() {
   dotnet nuget locals -c all 
 }
 
-delete-nuget-packages() {
+delete_nuget_packages() {
   local package_path="$(realpath ./)"
 
   while getopts ":p:" opt; do
@@ -48,13 +48,13 @@ delete-nuget-packages() {
       ;;
     esac
   done
-  delete-all-files-with-extension -p $package_path -e nupkg
+  delete_all_files_with_extension -p $package_path -e nupkg
 }
 
-is-packable-project() {
+is_packable_project() {
   local project_path=$1
 
-  install-software xmlstarlet 
+  install_software xmlstarlet 
   value=$(xmlstarlet sel -t -v "//IsPackable" $project_path)
   if [ "$value" = "true" ]; then
     return 1
@@ -63,10 +63,10 @@ is-packable-project() {
   fi
 }
 
-is-silo-project() {
+is_silo_project() {
   local project_path=$1
 
-  install-software xmlstarlet 
+  install_software xmlstarlet 
   value=$(xmlstarlet sel -t -v "//IsSilo" $project_path)
   if [ "$value" = "true" ]; then
     return 1
@@ -75,10 +75,10 @@ is-silo-project() {
   fi
 }
 
-is-dockerized-project() {
+is_dockerized_project() {
   local project_path=$1
 
-  install-software xmlstarlet
+  install_software xmlstarlet
   value=$(xmlstarlet sel -t -v "//IsDockerized" $project_path)
   if [ "$value" = "true" ]; then
     return 1
@@ -87,10 +87,10 @@ is-dockerized-project() {
   fi
 }
 
-is-service-project() {
+is_service_project() {
   local project_path=$1
 
-  install-software xmlstarlet
+  install_software xmlstarlet
   value=$(xmlstarlet sel -t -v "//IsService" $project_path)
   if [ "$value" = "true" ]; then
     return 1
@@ -99,7 +99,7 @@ is-service-project() {
   fi
 }
 
-dotnet-build-service() {
+dotnet_build_service() {
   local project_path=$1
   local version="1.0.0"
   local minor="0"
@@ -135,15 +135,15 @@ dotnet-build-service() {
     project_path=$(cat)
   fi
 
-  is-service-project $project_path
+  is_service_project $project_path
   should_build=$?
 
   if [ $should_build -eq 0 ]; then
-    is-silo-project $project_path
+    is_silo_project $project_path
     should_build=$?
   fi
   if [ $should_build -eq 0 ]; then
-    is-dockerized-project $project_path
+    is_dockerized_project $project_path
     should_build=$?
   fi
 
@@ -153,7 +153,7 @@ dotnet-build-service() {
   fi
 }
 
-dotnet-pack() {
+dotnet_pack() {
   local project_path=$1
   local version="1.0.0"
   local minor="0"
@@ -190,7 +190,7 @@ dotnet-pack() {
     project_path=$(cat)
   fi
 
-  is-packable-project $project_path
+  is_packable_project $project_path
 
   if [ $? -eq 1 ]; then
     dotnet restore $project_path

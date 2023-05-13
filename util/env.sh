@@ -1,4 +1,4 @@
-add-to-global-path() {
+add_to_global_path() {
   local p="$1"
 
   # check if the path is not empty 
@@ -16,7 +16,7 @@ add-to-global-path() {
   fi
 }
 
-add-source-file() {
+add_source_file() {
   local p="$1"
 
   # check if the path is not empty 
@@ -38,3 +38,7 @@ add-source-file() {
     fi
   fi
 }
+
+for function in $(declare -F | cut -d " " -f 3); do
+    echo "$function"
+done

@@ -1,4 +1,4 @@
-increment-semver() {
+increment_semver() {
   local version="1.0.0"
   local update_type="patch"
   local patch="0"
@@ -49,7 +49,7 @@ increment-semver() {
 }
 
 
-get-version() {
+get_version() {
   local version=""
   local version_file=".version"
 

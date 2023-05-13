@@ -1,4 +1,4 @@
-get-operating-system() {
+get_operating_system() {
   local os=$(uname -s)
   case $os in
     Linux*)   echo "linux" ;;
@@ -9,7 +9,7 @@ get-operating-system() {
   esac
 }
 
-get-architecture() {
+get_architecture() {
   local arch=$(uname -m)
   case $arch in
     x86_64*)  echo "x64" ;;
@@ -18,24 +18,24 @@ get-architecture() {
   esac
 }
 
-install-software() {
+install_software() {
   local tool=$1
 
-  local os=$(get-operating-system)
+  local os=$(get_operating_system)
 
   if [ "$os" = "linux" ]; then
-    install-for-linux $tool
+    install_for_linux $tool
   elif [ "$os" = "macos" ]; then
-    install-for-macos $tool
+    install_for_macos $tool
   elif [ "$os" = "windows" ]; then
-    install-for-windows $tool
+    install_for_windows $tool
   else
     echo "Unknown operating system: $os"
     exit 1
   fi
 }
 
-install-for-linux() {
+install_for_linux() {
   if ! command -v $1 &> /dev/null; then
     sudo apt-get install $1
   else
@@ -43,7 +43,7 @@ install-for-linux() {
   fi 
 }
 
-install-for-macos() {
+install_for_macos() {
   if ! command -v $1 &> /dev/null; then
     brew install $1
   else
@@ -51,6 +51,6 @@ install-for-macos() {
   fi
 }
 
-install-for-windows() {
+install_for_windows() {
   choco install $1
 }

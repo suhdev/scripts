@@ -1,4 +1,4 @@
-delete-all-files-with-extension() {
+delete_all_files_with_extension() {
   local package_path="$(realpath ./)"
   local extension="nupkg"
 
@@ -34,7 +34,7 @@ delete-all-files-with-extension() {
   fi
 }
 
-find-all-files-with-extension() {
+find_all_files_with_extension() {
   local package_path="$(realpath ./)"
   local extension="nupkg"
 
