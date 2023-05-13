@@ -8,3 +8,4 @@
 # tools
 brew install --cask raycast
 brew install xmlstarlet
+brew install azure-cli
