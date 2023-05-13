@@ -83,7 +83,11 @@ is_dockerized_project() {
   if [ "$value" = "true" ]; then
     return 1
   else
-    return 0
+    if [ -f "$(dirname $project_path)/Dockerfile" ]; then
+      return 1
+    else 
+      return 0
+    fi
   fi
 }
 
@@ -101,35 +105,8 @@ is_service_project() {
 
 dotnet_build_service() {
   local project_path=$1
-  local version="1.0.0"
-  local minor="0"
-  local major="0"
-  local patch="0"
-  local version_type="patch"
   local configuration="Release"
-
-  while getopts ":v:c:t:h" opt; do
-    case $opt in
-      v) 
-        version="$OPTARG"
-      ;;
-      c) 
-        configuration="$OPTARG"
-      ;;
-      t)
-        version_type="$OPTARG"
-      ;;
-      h)
-        echo "Usage"
-        echo "  dotnet-build.sh cs-proj-path [-v <version>] [-h]"
-        echo "  -v: Version to update (major, minor, patch)"
-        echo "  -h: Show help"
-        exit 0
-        ;;
-      \?) echo "Invalid option -$OPTARG" >&2
-      ;;
-    esac
-  done
+  local outputdir="$(dirname $project_path)/bin/Release"
 
   if [[ -p /dev/stdin ]]; then
     project_path=$(cat)
@@ -149,17 +126,13 @@ dotnet_build_service() {
 
   if [ $should_build -eq 1 ]; then
     dotnet restore $project_path
-    dotnet publish "$line" -c "$configuration" -o $outputdir    
+    dotnet publish "$project_path" -c "$configuration" -o $outputdir    
   fi
 }
 
 dotnet_pack() {
   local project_path=$1
   local version="1.0.0"
-  local minor="0"
-  local major="0"
-  local patch="0"
-  local version_type="patch"
   local configuration="Release"
 
   while getopts ":v:c:t:h" opt; do
@@ -170,13 +143,11 @@ dotnet_pack() {
       c) 
         configuration="$OPTARG"
       ;;
-      t)
-        version_type="$OPTARG"
-      ;;
       h)
         echo "Usage"
         echo "  dotnet-build.sh cs-proj-path [-v <version>] [-h]"
-        echo "  -v: Version to update (major, minor, patch)"
+        echo "  -v: Version to use (semver)"
+        echo "  -c: Configuration to build (Debug, Release)"
         echo "  -h: Show help"
         exit 0
         ;;
@@ -194,6 +165,66 @@ dotnet_pack() {
 
   if [ $? -eq 1 ]; then
     dotnet restore $project_path
-    dotnet pack "$project_path" -c "$configuration" -p:PackageVersion=$semver
+    dotnet pack "$project_path" -c "$configuration" -p:PackageVersion=$version
   fi
+}
+
+find_all_dotnet_projects() {
+  find . -name '*.csproj' -type f -exec echo {} \;
+}
+
+find_all_dotnet_projects_with_docker() {
+  find_all_dotnet_projects | while read line; do
+    if grep -q '<BuildDocker>true</BuildDocker>' "$line"; then
+      echo $line
+    fi
+  done
+}
+
+build_dotnet_release_docker_image() {
+  local csproj_path=$1
+  
+  # if file does not exist exit 
+  if [ ! -f "$csproj_path" ]; then
+    echo "Project file could not be found at $csproj_path"
+    exit 1
+  fi
+
+  local version="1.0.0"
+  local docker_file_path="$(dirname $csproj_path)/Dockerfile"
+  local csproj_path_no_extension="${csproj_path%.*}"
+  local dll_name="$(basename $csproj_path_no_extension).dll"
+  local image_name=$(basename $csproj_path_no_extension | tr '[:upper:]' '[:lower:]')
+
+  while getopts ":v:i:h" opt; do
+    case $opt in
+      v) 
+        version="$OPTARG"
+        ;;
+      i)
+        image_name="$OPTARG"
+        ;;
+      h)
+        echo "Usage"
+        echo "  build-dotnet-docker-image.sh cs-proj-path [-v <version>] [-h]"
+        echo "  -v: Version to update (major, minor, patch)"
+        echo "  -h: Show help"
+        exit 0
+        ;;
+      \?) echo "Invalid option -$OPTARG" >&2
+        ;;
+    esac
+  done
+  
+  if [ ! -f "$docker_file_path" ]; then
+    docker_file_path="$(dirname )"
+    echo "Dockerfile not found at $docker_file_path"
+    exit 1
+  fi
+
+  dotnet_build_service $csproj_path -v $version -c Release
+  local image_tag="$imagename:$version" 
+  DOCKER_BUILDKIT=0 docker build -t $image_tag -f "$(dirname $0)/Dockerfile" \
+    --build-arg DLL_NAME=$dll_name \
+    $outputdir
 }
