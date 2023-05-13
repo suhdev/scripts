@@ -2,10 +2,11 @@
 
 A set of reusable scripts
 
-## Dotnet
+## Usage
 
-### pack-and-publish.sh
+```zsh
+./install/mac.sh # to install tools
 
-```bash
-./dotnet/pack-and-publish.sh -h # to access help
+source include.sh
+add_source_file include.sh # to add to .zshrc
 ```
