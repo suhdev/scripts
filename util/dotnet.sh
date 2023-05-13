@@ -79,6 +79,7 @@ is_dockerized_project() {
   local project_path=$1
 
   install_software xmlstarlet
+
   value=$(xmlstarlet sel -t -v "//IsDockerized" $project_path)
   if [ "$value" = "true" ]; then
     return 1
@@ -233,7 +234,7 @@ build_dotnet_release_docker_image() {
 
   dotnet_build_service $csproj_path -v $version -c Release
   local image_tag="$imagename:$version" 
-  DOCKER_BUILDKIT=0 docker build -t $image_tag -f "$(dirname $0)/Dockerfile" \
+  DOCKER_BUILDKIT=0 docker build -t $image_tag -f $docker_file_path \
     --build-arg DLL_NAME=$dll_name \
     $outputdir
   
@@ -244,4 +245,160 @@ build_dotnet_release_docker_image() {
       docker push $registry_name/$image_tag
     fi
   fi
+}
+
+add_dotnet_dockerfile_to_project() {
+  local project_path=$1
+
+  if [ -z "$project_path" ]; then
+    project_path=$(realpath .)
+  fi
+
+  local destination_path="$project_path/Dockerfile"
+
+  if [ -f "$destination_path" ]; then
+    echo "Dockerfile already exists at $destination_path"
+    return 1
+  fi
+
+  cp "$samples_path/dotnet.Dockerfile" "$destination_path"
+}
+
+add_dotnet_silo_dockerfile_to_project() {
+  local project_path=$1
+
+  if [ -z "$project_path" ]; then
+    project_path=$(realpath .)
+  fi
+
+  local destination_path="$project_path/Dockerfile"
+
+  if [ -f "$destination_path" ]; then
+    echo "Dockerfile already exists at $destination_path"
+    exit 1
+  fi
+
+  cp "$samples_path/dotnet.silo.Dockerfile" "$destination_path"
+}
+
+make_package_project() {
+  local csproj_path=$1
+
+  if [ -z "$csproj_path" ]; then
+    csproj_path=$(find_first_file_in_parent_directories_that_match_extension csproj)
+  fi
+
+  install_software xmlstarlet
+
+  add_element_with_value_if_not_exist "IsPackable" "true" "/Project/PropertyGroup[last()]" $csproj_path
+}
+
+make_silo_project() {
+  local csproj_path=$1
+
+  if [ -z "$csproj_path" ]; then
+    csproj_path=$(find_first_file_in_parent_directories_that_match_extension csproj)
+  fi
+
+  install_software xmlstarlet
+
+  add_element_with_value_if_not_exist "IsSiloe" "true" "/Project/PropertyGroup[last()]" $csproj_path
+
+  add_dotnet_silo_dockerfile_to_project $csproj_path
+}
+
+make_service_project() {
+  local csproj_path=$1
+
+  if [ -z "$csproj_path" ]; then
+    csproj_path=$(find_first_file_in_parent_directories_that_match_extension csproj)
+  fi
+
+  install_software xmlstarlet
+
+  add_element_with_value_if_not_exist "IsService" "true" "/Project/PropertyGroup[last()]" $csproj_path
+
+  add_dotnet_dockerfile_to_project $csproj_path
+}
+
+make_dockerized_project() {
+  local csproj_path=$1
+
+  if [ -z "$csproj_path" ]; then
+    csproj_path=$(find_first_file_in_parent_directories_that_match_extension csproj)
+  fi
+
+  install_software xmlstarlet
+
+  add_element_with_value_if_not_exist "IsDockerized" "true" "/Project/PropertyGroup[last()]" $csproj_path
+
+  add_dotnet_dockerfile_to_project $(dirname $csproj_path)
+}
+
+create_solution_build_directory() {
+  local solution_directory=$1
+
+  if [ -z "$solution_directory" ]; then
+    solution_directory=$(realpath .)
+  fi
+
+  local build_directory_sample_path="$samples_path/Directory.Build.props"
+
+  cp $build_directory_sample_path "$solution_directory/Directory.Build.props"
+}
+
+add_dependency_to_project() {
+  local dependency_name=$1 
+  local dependency_version=$2
+  
+  local sln_file_path=$(find_first_file_in_parent_directories_that_match_extension sln)
+  if [ -z $sln_file_path ]; then
+    echo "Could not find sln file"
+    return 1
+  fi
+  local solution_directory=$(dirname $sln_file_path)
+
+  local csproj_path=$(find_first_file_in_parent_directories_that_match_extension csproj)
+  local variable_name=${dependency_name//./}
+
+  if [ -z $csproj_path ]; then
+    echo "Could not find csproj file"
+    return 1
+  fi
+
+  local project_path=$(dirname $csproj_path)
+  local directory_build_props_path="$solution_directory/Directory.Build.props"
+
+  if [ ! -f "$directory_build_props_path" ]; then
+    create_solution_build_directory "$solution_directory"
+  fi
+
+  install_software xmlstarlet &> /dev/null
+
+  local exist_version=$(xmlstarlet sel -t -v "/Project/PropertyGroup/$variable_name" $directory_build_props_path)
+
+  exist_version=${exist_version//[[:space:]]/}
+  if [ -n "$exist_version" ]; then
+    dependency_version=$exist_version
+  else 
+    xmlstarlet ed -L -N x="http://schemas.microsoft.com/developer/msbuild/2003" -s "/x:Project/x:PropertyGroup[last()]" -t elem -n "$variable_name" -v "$dependency_version" $directory_build_props_path
+  fi
+
+  local exist_dependency=$(xmlstarlet sel -t -v "//PackageReference[@Include='$dependency_name']/@Version" $csproj_path)
+  
+  if [ -z "$exist_dependency" ]; then
+    # add PackageReference to csproj
+    xmlstarlet ed -L -s "/Project/ItemGroup[last()]" -t elem -n "PackageReference" -v "" $csproj_path
+    xmlstarlet ed -L -s "/Project/ItemGroup[last()]/PackageReference[last()]" -t attr -n "Include" -v $dependency_name $csproj_path
+    xmlstarlet ed -L -s "/Project/ItemGroup[last()]/PackageReference[last()]" -t attr -n "Version" -v "\$($variable_name)" $csproj_path
+  else 
+    xmlstarlet ed -L -u "/Project/ItemGroup/PackageReference[@Include='$dependency_name']/@Version" -v "\$($variable_name)" $csproj_path
+  fi
+
+}
+
+get_dependencies_version() {
+  local $csproj_path=$1
+
+  xmlstarlet sel -t -v "/Project/ItemGroup/PackageReference/@Include" $csproj_path -i 
 }

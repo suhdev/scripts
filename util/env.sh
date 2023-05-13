@@ -38,7 +38,3 @@ add_source_file() {
     fi
   fi
 }
-
-for function in $(declare -F | cut -d " " -f 3); do
-    echo "$function"
-done

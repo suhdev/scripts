@@ -1,6 +1,6 @@
-source $(dirname $0)/util/env.sh
-source $(dirname $0)/util/os.sh
-source $(dirname $0)/util/semver.sh
-source $(dirname $0)/util/files.sh
-source $(dirname $0)/util/dotnet.sh
-source $(dirname $0)/util/samples-management.sh
+# util_path="$(dirname $0)/util/*"
+export samples_path="$(dirname $0)/samples"
+setopt +o nomatch
+for file in $(dirname $0)/util/*; do
+    source $file
+done
