@@ -1,0 +1,23 @@
+useStatefulSet: true
+storage:
+  className: hostpath
+auth:
+  databases:
+    - compliance
+    - accounts
+    - profiles
+  usernames:
+    - newdawn
+    - newdawn
+    - newdawn
+  passwords:
+    - newdawn
+    - newdawn
+    - newdawn
+  rootUser: root
+  rootPassword: newdawn
+image:
+  tag: 6.0.4-jammy
+  repository: mongo
+persistence:
+  mountPath: /data/db

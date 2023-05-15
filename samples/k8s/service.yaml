@@ -1,0 +1,45 @@
+kind: Service
+apiVersion: v1
+metadata:
+  name: chartname-svc
+  namespace: newdawn
+  labels:
+    app: chartname
+spec:
+  selector:
+    app: chartname
+  ports:
+    - protocol: TCP
+      port: 80
+  type: ClusterIP
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: chartname-deployment
+  namespace: newdawn
+  labels:
+    app: chartname
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: chartname
+  template:
+    metadata:
+      labels:
+        app: chartname
+      annotations:
+        dapr.io/enabled: "true"
+        dapr.io/app-id: "chartname"
+        dapr.io/app-port: "80"
+        dapr.io/enable-api-logging: "true"
+    spec:
+      containers:
+        - name: chartname
+          image: imagename:1.0.0
+          ports:
+            - containerPort: 80
+            - containerPort: 11111
+            - containerPort: 30000
