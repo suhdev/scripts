@@ -59,7 +59,7 @@ delete_nuget_packages() {
 is_packable_project() {
   local project_path=$1
 
-  install_software xmlstarlet 
+  install_software xmlstarlet &> /dev/null;
   value=$(xmlstarlet sel -t -v "//IsPackable" $project_path)
   if [ "$value" = "true" ]; then
     return 1
@@ -71,7 +71,7 @@ is_packable_project() {
 is_silo_project() {
   local project_path=$1
 
-  install_software xmlstarlet 
+  install_software xmlstarlet &> /dev/null;
   value=$(xmlstarlet sel -t -v "//IsSilo" $project_path)
   if [ "$value" = "true" ]; then
     return 1
@@ -100,7 +100,7 @@ is_dockerized_project() {
 is_service_project() {
   local project_path=$1
 
-  install_software xmlstarlet
+  install_software xmlstarlet &> /dev/null;
   value=$(xmlstarlet sel -t -v "//IsService" $project_path)
   if [ "$value" = "true" ]; then
     return 1
@@ -137,21 +137,34 @@ dotnet_build_service() {
 }
 
 dotnet_pack() {
-  local project_path=$1
-
-  # check if project_path is a file
-  if [ ! -f "$project_path" ]; then
-    project_path=$(find_first_file_in_parent_directories_that_match_extension csproj)
-    
+  local project_paths=()
+  # check if standard input has input 
+  if [[ -p /dev/stdin ]]; then
+    # read each line into an array
+    while IFS= read -r line; do
+        project_paths+=("$line")
+    done
+  elif [ -f "$1" ]; then
+    project_paths=("$1")
   fi
+
+  # check if project_path is not a file or project_paths is empty 
+  if [ ${#project_paths[@]} -eq 0 ]; then
+    local project_path=$(find_first_file_in_parent_directories_that_match_extension csproj)
+    project_paths=($project_path)
+  fi
+  # if [ ! -f "$project_path" ]; then
+  #   project_path=$(find_first_file_in_parent_directories_that_match_extension csproj)
+    
+  # fi
 
   local version="1.0.0"
   local configuration="Release"
   local registry_name="suhdev"
-  local outputdir="$(dirname $project_path)/bin/Release"
   local push=false
+  local force_pack=false
 
-  while getopts ":v:c:t:ir:h" opt; do
+  while getopts ":v:c:t:irf:h" opt; do
     case $opt in
       v) 
         version="$OPTARG"
@@ -165,12 +178,18 @@ dotnet_pack() {
       r)
         registry_name="$OPTARG"
       ;;
+      f)
+        force_pack=true
+      ;;
       h)
         echo "Usage"
         echo "  dotnet-build.sh cs-proj-path [-v <version>] [-h]"
         echo "  -v: Version to use (semver)"
         echo "  -c: Configuration to build (Debug, Release)"
         echo "  -h: Show help"
+        echo "  -i: Push to registry"
+        echo "  -r: Registry name"
+        echo "  -f: Force pack"
         exit 0
         ;;
       \?) echo "Invalid option -$OPTARG" >&2
@@ -178,18 +197,23 @@ dotnet_pack() {
     esac
   done
 
-  # if stdin has input read that into $project_path
-  if [[ -p /dev/stdin ]]; then
-    project_path=$(cat)
-  fi
+  # loop through project_paths and build them
+  for project_path in "${project_paths[@]}"; do
+    local outputdir="$(dirname $project_path)/bin/Release"
+    is_packable_project $project_path
+    retval=$?
 
-  is_packable_project $project_path
-
-  if [ $? -eq 1 ]; then
-    dotnet restore $project_path
-    dotnet pack "$project_path" -c "$configuration" -p:PackageVersion=$version -o $outputdir
-    dotnet nuget push "$outputdir/*.nupkg" --source $registry_name
-  fi
+    # check if either is packable or force_path is true 
+    if [[ $force_pack == true ]] || [[ $retval -eq 1 ]]; then
+      echo "Building $project_path"
+      dotnet restore $project_path
+      dotnet pack "$project_path" -c "$configuration" -p:PackageVersion=$version -o $outputdir
+      # check if push is true then push to source
+      if [[ $push == true ]]; then
+        dotnet nuget push "$outputdir/*.nupkg" --source $registry_name
+      fi
+    fi
+  done
 }
 
 find_all_dotnet_projects() {

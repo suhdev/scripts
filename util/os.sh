@@ -31,7 +31,7 @@ install_software() {
     install_for_windows $tool
   else
     echo "Unknown operating system: $os"
-    exit 1
+    return 1
   fi
 }
 
