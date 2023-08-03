@@ -1,6 +1,5 @@
 <Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
     <ItemGroup Condition="$(OrleansAbstractions) == 'true'">
-        <PackageReference Include="Microsoft.Orleans.Sdk" Version="$(OrleansSdkVersion)"/>
     </ItemGroup>
     <ItemGroup Condition="$(OrleansGrains) == 'true'">
     </ItemGroup>
@@ -10,13 +9,6 @@
     </ItemGroup>
 
     <PropertyGroup>
-        <OrleansSdkVersion>7.1.0</OrleansSdkVersion>
-        <DapperVersion>2.0.123</DapperVersion>
-        <NpgsqlVersion>7.0.2</NpgsqlVersion>
-        <MicrosoftEntityFrameworkCoreVersion>7.0.3</MicrosoftEntityFrameworkCoreVersion>
-        <FluentMigratorVersion>3.3.2</FluentMigratorVersion>
-        <MicrosoftExtensionsHostingVersion>7.0.1</MicrosoftExtensionsHostingVersion>
-        <MicrosoftExtensionsHostingAbstractionsVersion>7.0.0</MicrosoftExtensionsHostingAbstractionsVersion>
-        <MongoDBDriverVersion>2.19.0</MongoDBDriverVersion>
+
     </PropertyGroup>
 </Project>

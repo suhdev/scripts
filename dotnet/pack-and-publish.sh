@@ -69,24 +69,6 @@ update_version() {
   echo "$semver" > nuget-version.txt
 }
 
-delete_nuget_packages() {
-  find $PACKAGE_PATH -type f -name '*.nupkg' -delete
-}
-
-create_nuget_registry() {
-  # Check if the folder already exists
-  if [ -d "$registry_directory" ]; then
-      echo "Folder '$registry_directory' already exists."
-  else
-      # Create the folder
-      mkdir "$registry_directory"
-      echo "Folder '$registry_directory' created."
-      if grep -q "$2" "$(dotnet nuget list source)"; then
-        dotnet nuget add source $registry_directory --name $registry_name
-      fi
-  fi
-}
-
 build_and_publish_package() {
   local line="$1"
   local record_failure=$2

@@ -1,3 +1,65 @@
+add_latest_dependency_to_project() {
+  local source="https://api.nuget.org/v3/index.json"
+  local package=""
+  local version=""
+
+  while getopts "p:s:h" opt; do
+    case $opt in
+      p) package="$OPTARG"
+      ;;
+      s) source="$OPTARG"
+      ;;
+      h) 
+        echo "Usage"
+        echo "  search_for_package [-p <package-name>] [-h]"
+        echo "  -p: Name of the package to search for"
+        echo "  -h: Show help"
+        exit 0
+        ;;
+      \?) echo "Invalid option -$OPTARG" >&2
+      ;;
+    esac
+  done
+
+  if [ -z "$package" ]; then
+    echo "Package name is required"
+    return 1
+  fi
+
+  IFS=' ' read -r package version <<< $(nuget list "PackageId:$package" -AllVersions -Source $source)
+
+  add_dependency_to_project -p $package -v $version
+}
+
+
+list_remote_nuget_sources() {
+  xmlstarlet sel -t -v "//configuration/packageSources/add/@value" ~/.nuget/NuGet/NuGet.Config
+}
+
+list_nuget_package_versions() {
+  local source_url="https://api.nuget.org/v3/index.json"
+  local package_name=""
+
+  while getopts "p:s:h" opt; do
+    case $opt in
+      p) package_name="$OPTARG"
+      ;;
+      s) source_url="$OPTARG"
+      ;;
+      h) 
+        echo "Usage"
+        echo "  list_nuget_package_versions [-p <package-name>] [-s <source-url>] [-h]"
+        echo "  -p: Name of the package to search for"
+        echo "  -s: Source url to search for the package, defaults to https://api.nuget.org/v3/index.json"
+        echo "  -h: Show help"
+        exit 0
+        ;;
+      \?) echo "Invalid option -$OPTARG" >&2
+      ;;
+    esac
+  done
+}
+
 create_nuget_registry() {
   local registry_directory="$(realpath $HOME/.nuget-registry)"
   local registry_name="suhdev"
@@ -138,39 +200,23 @@ dotnet_build_service() {
 
 dotnet_pack() {
   local project_paths=()
-  # check if standard input has input 
-  if [[ -p /dev/stdin ]]; then
-    # read each line into an array
-    while IFS= read -r line; do
-        project_paths+=("$line")
-    done
-  elif [ -f "$1" ]; then
-    project_paths=("$1")
-  fi
-
-  # check if project_path is not a file or project_paths is empty 
-  if [ ${#project_paths[@]} -eq 0 ]; then
-    local project_path=$(find_first_file_in_parent_directories_that_match_extension csproj)
-    project_paths=($project_path)
-  fi
-  # if [ ! -f "$project_path" ]; then
-  #   project_path=$(find_first_file_in_parent_directories_that_match_extension csproj)
-    
-  # fi
-
   local version="1.0.0"
   local configuration="Release"
   local registry_name="suhdev"
-  local push=false
+  local push=true
   local force_pack=false
 
-  while getopts ":v:c:t:irf:h" opt; do
+  while getopts "v:c:p:r:f:ih" opt; do
+    echo "opt $opt";
     case $opt in
       v) 
         version="$OPTARG"
       ;;
       c) 
         configuration="$OPTARG"
+      ;;
+      p)
+        project_paths+=("$OPTARG")
       ;;
       i)
         push=true
@@ -190,12 +236,30 @@ dotnet_pack() {
         echo "  -i: Push to registry"
         echo "  -r: Registry name"
         echo "  -f: Force pack"
-        exit 0
+        return 0
         ;;
       \?) echo "Invalid option -$OPTARG" >&2
       ;;
     esac
   done
+  # check if standard input has input 
+  if [[ -p /dev/stdin ]]; then
+    # read each line into an array
+    while IFS= read -r line; do
+        project_paths+=("$line")
+    done
+  fi
+
+  # check if project_path is not a file or project_paths is empty 
+  if [ ${#project_paths[@]} -eq 0 ]; then
+    local project_path=$(find_first_file_in_parent_directories_that_match_extension csproj)
+    project_paths=($project_path)
+  fi
+  # if [ ! -f "$project_path" ]; then
+  #   project_path=$(find_first_file_in_parent_directories_that_match_extension csproj)
+    
+  # fi
+
 
   # loop through project_paths and build them
   for project_path in "${project_paths[@]}"; do
@@ -229,23 +293,13 @@ find_all_dotnet_projects_with_docker() {
 }
 
 build_dotnet_release_docker_image() {
-  local csproj_path=$1
-  
-  # if file does not exist exit 
-  if [ ! -f "$csproj_path" ]; then
-    echo "Project file could not be found at $csproj_path"
-    exit 1
-  fi
-
+  local csproj_path=""
   local version="1.0.0"
-  local docker_file_path="$(dirname $csproj_path)/Dockerfile"
-  local csproj_path_no_extension="${csproj_path%.*}"
-  local dll_name="$(basename $csproj_path_no_extension).dll"
-  local image_name=$(basename $csproj_path_no_extension | tr '[:upper:]' '[:lower:]')
-  local registry_name="local-registry"
-  local should_push=false
+  local image_name=""
+  local registry_name=""
+  local outputdir=""
 
-  while getopts ":v:i:rp:h" opt; do
+  while getopts "p:v:i:r:o:h" opt; do
     case $opt in
       v) 
         version="$OPTARG"
@@ -255,40 +309,62 @@ build_dotnet_release_docker_image() {
         ;;
       r)
         registry_name="$OPTARG"
+        echo "Registry name: $registry_name"
+        ;;
+      o)
+        outputdir="$OPTARG"
         ;;
       p)
-        should_push=true
+        csproj_path="$OPTARG"
         ;;
       h)
         echo "Usage"
         echo "  build-dotnet-docker-image.sh cs-proj-path [-v <version>] [-h]"
         echo "  -v: Version to update (major, minor, patch)"
         echo "  -h: Show help"
-        exit 0
+        return 0
         ;;
       \?) echo "Invalid option -$OPTARG" >&2
         ;;
     esac
   done
-  
+
+
+  # if file does not exist exit 
+  if [ ! -f "$csproj_path" ]; then
+    echo "Project file could not be found at $csproj_path"
+    return 1
+  fi
+
+  csproj_basename=$(basename $csproj_path)
+  docker_file_path="$(dirname $csproj_path)/Dockerfile"
+  csproj_path_no_extension="${csproj_path%.*}"
+  dll_name="$(basename $csproj_path_no_extension).dll"
+  if [ -z "$image_name" ]; then
+    image_name=$(basename $csproj_path_no_extension | tr '[:upper:]' '[:lower:]')
+    image_name=${image_name//./-}
+  fi
+
+  if [ -z "$outputdir" ]; then
+    outputdir="$(dirname $csproj_path)/bin/Release"
+  fi
+
   if [ ! -f "$docker_file_path" ]; then
-    docker_file_path="$(dirname )"
     echo "Dockerfile not found at $docker_file_path"
-    exit 1
+    return 1
   fi
 
   dotnet_build_service $csproj_path -v $version -c Release
-  local image_tag="$imagename:$version" 
-  DOCKER_BUILDKIT=0 docker build -t $image_tag -f $docker_file_path \
+  local image_tag="$image_name:$version" 
+  DOCKER_BUILDKIT=0 docker buildx build --platform linux/amd64 -t $image_tag -f $docker_file_path \
     --build-arg DLL_NAME=$dll_name \
     $outputdir
   
-  if [ $should_push = true ]; then
+  # check if registy isn't empty 
+  if [ ! -z "$registry_name" ]; then
     # check if registry isn't local registry 
-    if [ "$registry_name" != "local-registry" ]; then
-      docker tag $image_tag $registry_name/$image_tag
-      docker push $registry_name/$image_tag
-    fi
+    docker tag $image_tag "$registry_name/$image_tag"
+    docker push "$registry_name/$image_tag"
   fi
 }
 
@@ -393,8 +469,28 @@ create_solution_build_directory() {
 }
 
 add_dependency_to_project() {
-  local dependency_name=$1 
-  local dependency_version=$2
+  local dependency_name="" 
+  local dependency_version=""
+
+  while getopts "p:v:h" opt; do
+    case $opt in
+      v) 
+        dependency_version="$OPTARG"
+        ;;
+      p)
+        dependency_name="$OPTARG"
+        ;;
+      h)
+        echo "Usage"
+        echo "  add-dependency-to-project.sh dependency-name [-v <version>] [-h]"
+        echo "  -v: Version to update (major, minor, patch)"
+        echo "  -h: Show help"
+        return 1
+        ;;
+      \?) echo "Invalid option -$OPTARG" >&2
+        ;;
+    esac
+  done
   
   local sln_file_path=$(find_first_file_in_parent_directories_that_match_extension sln)
   if [ -z $sln_file_path ]; then
